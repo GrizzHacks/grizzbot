@@ -110,43 +110,62 @@ export const getDynatraceTest = functions.https.onRequest(async (request, respon
 // Cloud Function: joinQueue
 // --------------------------
 export const slashJoinQueue = functions.https.onRequest(async (request, response) => {
-  functions.logger.info("Recieved slash command: joinqueue", {structuredData: true})
-  // Parse and save the incoming Slack data
-  const data = request.body
-  console.log(data)
+  try {
+    functions.logger.info("Recieved slash command: joinqueue", {structuredData: true})
+    // Parse and save the incoming Slack data
+    const slackData = request.body
+    console.log(slackData)
+  
+    const channelID = slackData.channel_id
+    const channelName = slackData.channel_name //use to retrieve sponsor Firebase doc
+    const userID = slackData.user_id
+    const userName = slackData.user_name
+    const command = slackData.command
 
-  const channelID = data.channel_id
-  const channelName = data.channel_name //use to retrieve sponsor Firebase doc
-  const userID = data.user_id
-  const userName = data.user_name
-  const command = data.command
+    //Retrieve Firebase data
+    const snapshot = await admin.firestore().doc(`queue/${channelName}`).get()
+    const fbData = snapshot.data()
+    console.log(fbData)
 
-//   try {
-//     const snapshot = await admin.firestore().doc(`queue/${channelID}`).get()
-//     const data = snapshot.data()
-//     console.log(data)
-//     response.send(data) //send contents of the doc as JSON
+    //Construct users array
+    const userArray = fbData?.users
+    // const testArray = ["adimmer","abroski"]
+    if (userArray.includes(userID)) {
 
-//   } catch (error) {
-//      //Handle error
-//      console.log(error)
-//      response.status(500).send(error)
-//   }
+        //send response to Slack as JSON
+        const responseMessage:string = `Please be patient! You are already in the queue!\n
+        Recieved /joinqueue command with Slack data:\n 
+        channelID: ${channelID}\n
+        channelName: ${channelName}\n
+        userID: ${userID}\n
+        userName: ${userName}\n
+        command: ${command}\n
+        Firebase data:\n
+        ${JSON.stringify(fbData)}`
+        response.send(responseMessage)
+    } else {
+        try {
+          //add new userID to the queue
+          userArray.push(userID)
+          //update users array in Firebase
+          await admin.firestore().doc(`queue/${channelName}`).update({
+            users: userArray
+          })
+          //Respond to Slack
+          response.send(`You have been successfully added to the queue!\n ${userArray}`)
+            
+        } catch (error) {
+          //Handle error
+          console.log(error)
+          response.status(500).send(error)
+        }
+    }
+  } catch (error) {
+     //Handle error
+     console.log(error)
+     response.status(500).send(error)
+  }
 
-
-//   if (!array || !array.length) {
-//     // array or array.length are falsy
-//     // ⇒ do not attempt to process array
-// }
-
- //send response to Slack as JSON
-  const responseMessage:string = `Recieved /joinqueue command with Slack data:\n 
-  channelID: ${channelID}\n
-  channelName: ${channelName}\n
-  userID: ${userID}\n
-  userName: ${userName}\n
-  command: ${command}\n`
-  response.send(responseMessage)
 })
 
 
@@ -186,5 +205,11 @@ export const slashShowQueue = functions.https.onRequest((request, response) => {
  //send response as JSON
  const responseMessage:string = `Recieved /showqueue command with args: '${JSON.stringify(data)}'`
  response.send(responseMessage)
+
+
+ //   if (!array || !array.length) {
+//     // array or array.length are falsy
+//     // ⇒ do not attempt to process array
+// }
 
 })
