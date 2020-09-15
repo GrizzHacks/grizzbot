@@ -122,14 +122,13 @@ export const slashJoinQueue = functions.https.onRequest(async (request, response
     const userName = slackData.user_name
     const command = slackData.command
 
-    //Retrieve Firebase data
+    //Retrieve Firebase data for this channel
     const snapshot = await admin.firestore().doc(`queue/${channelName}`).get()
     const fbData = snapshot.data()
     console.log(fbData)
 
     //Construct users array
     const userArray = fbData?.users
-    // const testArray = ["adimmer","abroski"]
     if (userArray.includes(userID)) {
 
         //send response to Slack as JSON
@@ -169,6 +168,57 @@ export const slashJoinQueue = functions.https.onRequest(async (request, response
 })
 
 
+// Cloud Function: advanceQueue
+// --------------------------
+export const slashAdvanceQueue = functions.https.onRequest(async (request, response) => {
+  try {
+    functions.logger.info("Recieved slash command: advancequeue", {structuredData: true})
+    const slackData = request.body
+    console.log(slackData)
+  
+    //get channel name and sponsor key
+    const channelName:string = slackData.channel_name //use to retrieve sponsor Firebase doc
+    const enteredSponsorKey:string = slackData.text.trim()
+
+    //Retrieve Firebase data for this channel
+    const snapshot = await admin.firestore().doc(`queue/${channelName}`).get()
+    const fbData = snapshot.data()
+    console.log(fbData)
+
+    const sponsorKey:string = fbData?.sponsorKey //get the actual sponsor key
+    if (enteredSponsorKey === sponsorKey) {
+
+      //Get users array and advance the queue
+      const userArray = fbData?.users
+
+      // if the queue is empty or null, do not attempt to process
+      if (!userArray || !userArray.length) {
+            response.send(`advancequeue: The ${channelName} queue is empty!`)
+        }
+
+      //Advance the queue and update the Firebase users array
+      userArray.shift()
+      await admin.firestore().doc(`queue/${channelName}`).update({
+        users: userArray
+      })
+
+      response.send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new user will join the call soon! `)
+    } else {
+      response.send("advancequeue: Invalid sponsor key, try again!")
+    }
+
+    
+  } catch (error) {
+     //Handle error
+     console.log(error)
+     response.status(500).send(error)
+  }
+
+})
+
+
+
+
 // Cloud Function: leaveQueue
 // --------------------------
 export const slashLeaveQueue = functions.https.onRequest((request, response) => {
@@ -181,35 +231,15 @@ export const slashLeaveQueue = functions.https.onRequest((request, response) => 
   response.send(responseMessage)
 })
 
-// Cloud Function: advanceQueue
-// --------------------------
-export const slashAdvanceQueue = functions.https.onRequest((request, response) => {
-  functions.logger.info("Recieved slash command: advancequeue", {structuredData: true})
-  const data = request.body
-  console.log(data)
-
- //send response as JSON
- const responseMessage:string = `Recieved /advancequeue command with args: '${JSON.stringify(data)}'`
- response.send(responseMessage)
-
-})
-
-
-// Cloud Function: advanceQueue
+// Cloud Function: showQueue
 // --------------------------
 export const slashShowQueue = functions.https.onRequest((request, response) => {
-  functions.logger.info("Recieved slash command: advancequeue", {structuredData: true})
+  functions.logger.info("Recieved slash command: showQueue", {structuredData: true})
   const data = request.body
   console.log(data)
 
  //send response as JSON
  const responseMessage:string = `Recieved /showqueue command with args: '${JSON.stringify(data)}'`
  response.send(responseMessage)
-
-
- //   if (!array || !array.length) {
-//     // array or array.length are falsy
-//     // ⇒ do not attempt to process array
-// }
 
 })
