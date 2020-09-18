@@ -15,55 +15,53 @@ const bot = new WebClient(SLACK_BOT_TOKEN)
 // ============ Helper Functions ================
 
 // Post a message to a channel your app is in using ID and message text
-function publishMessage(response: functions.Response<any>, id: string, text: string) {
+function sendLinkMessage(response: functions.Response<any>, channelID: string, channelName: string, userID: string, userName:string, link: string) {
+    console.log(userID)
+
     // Call the chat.postMessage method using the WebClient API
-    bot.chat.postMessage({
+    bot.chat.postEphemeral({
       // The token you used to initialize your app
       token: SLACK_BOT_TOKEN,
-      channel: id,
-      text: "",
+      channel: channelID,
+      user: userID,
+      link_names: true,
+      text: `${channelName} queue link: ${link}`,
+      attachments: [],
       // You could also use a blocks[] array to send richer content
       blocks: [
         {
           "type": "section",
           "text": {
             "type": "mrkdwn",
-            "text": `Here is the text you passed in: ${text}`
+            "text": `Hey, @${userName}, you're up! Click the link below to join the ${channelName} queue! 🐻`
           }
         },
         {
           "type": "divider"
         },
         {
-          "type": "actions",
-          "elements": [
-            {
-              "type": "button",
-              "text": {
-                "type": "plain_text",
-                "text": "Join Queue",
-                "emoji": true
-              },
-              "value": "click_me_123"
-            }
-          ]
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": `${link}`
+          }
         }
       ]
     })
     .then(() => {
-      console.log('GrizzBot Hello World message posted!')
-      response.send('Message Successfully Posted!')
+      console.log(`Link sent: Ephemeral message to ${userID} successfully posted to ${channelID}!`)
+      response.status(200).send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new hacker should join the call soon! 🐻`)
     })
     .catch((err) => {
       console.log(err)
-      response.sendStatus(500) //send error code
+      response.status(200).send(err) //send error code
     })
     
 }
 
 // ============ Google Cloud Functions ================
 
-// Cloud Function: buttonClickHandler
+// Cloud Function: buttonClickHandler (currently does nothing)
 // --------------------------
 // Any interactions with Slack shortcuts, modals, or interactive components 
 // (such as buttons, select menus, and datepickers) will be sent to this route
@@ -78,13 +76,26 @@ export const buttonClickHandler = functions.https.onRequest((request, response) 
 
 // Cloud Function: Hello World - send a message to Slack channel
 // --------------------------
-export const helloWorldMessage = functions.https.onRequest((request, response) => {
+export const slackHelloWorldMessage = functions.https.onRequest((request, response) => {
   functions.logger.info("Recieved helloWorldMessageRequest", {structuredData: true})
+  //  // Parse and save the incoming Slack data
+  //  const slackData = request.body
+  //  console.log(slackData)
+ 
+  //  const channelID = slackData.channel_id
+  //  const channelName = slackData.channel_name //use to retrieve sponsor Firebase doc
+  //  const userID = slackData.user_id
+  //  const userName = slackData.user_name
+  //  const command = slackData.command
+  //  const userMap = {userID, userName} //store each user as a map with their ID and username
   
-   //ID of GrizzHacks office-hour-test channel
-  const channelID: string = "G017SQ9MU1K"                  
+  const channelID: string = "C01A31G8JEB"    //ID of sponsor_amazon channel
+  const channelName: string = "sponsor_amazon"
+  const userID: string = "U01AB51KSSJ"     
+  const userName: string = "harrisonlavins"             
   //publish message to Slack and send response
-  publishMessage(response, channelID, "Hello world :tada:") 
+  sendLinkMessage(response, channelID, channelName, userID, userName, "https://google.com") 
+
 })
 
 
@@ -98,11 +109,10 @@ export const slashJoinQueue = functions.https.onRequest(async (request, response
     const slackData = request.body
     console.log(slackData)
   
-    const channelID = slackData.channel_id
+    // const channelID = slackData.channel_id
     const channelName = slackData.channel_name //use to retrieve sponsor Firebase doc
     const userID = slackData.user_id
     const userName = slackData.user_name
-    const command = slackData.command
     const userMap = {userID, userName} //store each user as a map with their ID and username
 
     //Retrieve Firebase data for this channel
@@ -130,7 +140,7 @@ export const slashJoinQueue = functions.https.onRequest(async (request, response
             users: userArray
           })
 
-          response.send(`You have been successfully added to the queue! 🐻\n ${userArray}`)
+          response.send(`${userName}, you have been successfully added to the ${channelName} queue! 🐻`)
         } catch (error) {
           //Handle error
           console.log(error)
@@ -139,15 +149,7 @@ export const slashJoinQueue = functions.https.onRequest(async (request, response
       
     } else {
        //send response to Slack as JSON
-       const responseMessage:string = `You are already in the queue! 🐻\n
-       Recieved /joinqueue command with Slack data:\n 
-       channelID: ${channelID}\n
-       channelName: ${channelName}\n
-       userID: ${userID}\n
-       userName: ${userName}\n
-       command: ${command}\n
-       Firebase data:\n
-       ${JSON.stringify(fbData)}`
+       const responseMessage:string = `Hang in there, ${userName}, you are already in the queue! 🐻`
        response.send(responseMessage)
     }
 
@@ -195,7 +197,7 @@ export const slashAdvanceQueue = functions.https.onRequest(async (request, respo
         users: userArray
       })
 
-      response.send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new user will join the call soon! 🐻`)
+      response.send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new hacker should join the call soon! 🐻`)
     } else {
       response.send("advancequeue: Invalid sponsor key or wrong channel, try again! 🐻")
     }
@@ -219,7 +221,6 @@ export const slashShowQueue = functions.https.onRequest(async (request, response
       console.log(slackData)
     
       const channelName = slackData.channel_name //use to retrieve sponsor Firebase doc
-      // const userID = slackData.user_id        //use to send ephemeral message back to user
 
       //Retrieve Firebase data for this channel
       const snapshot = await admin.firestore().doc(`queue/${channelName}`).get()
@@ -234,7 +235,7 @@ export const slashShowQueue = functions.https.onRequest(async (request, response
       }
 
       //Construct queue status string and send response to Slack
-      let responseMessage:string = `The current queue for ${channelName}:\n`
+      let responseMessage:string = `The current queue to meet with ${channelName}:\n`
       let i = 1
       userArray.forEach((currUser:any) => {
         responseMessage += `${i}. ${currUser.userName}\n`
@@ -253,13 +254,43 @@ export const slashShowQueue = functions.https.onRequest(async (request, response
 
 // Cloud Function: leaveQueue
 // --------------------------
-export const slashLeaveQueue = functions.https.onRequest((request, response) => {
-  functions.logger.info("Recieved slash command: leavequeue", {structuredData: true})
-  const data = request.body
-  console.log(data)
+export const slashLeaveQueue = functions.https.onRequest(async (request, response) => {
+  try {
+    functions.logger.info("Recieved slash command: leavequeue", {structuredData: true})
+    // Parse and save the incoming Slack data
+    const slackData = request.body
+    console.log(slackData)
+  
+    const channelName:string = slackData.channel_name //use to retrieve sponsor Firebase doc
+    const userID:string = slackData.user_id
+    const userName:string = slackData.user_name
 
-   //send response to Slack
-   const responseMessage:string = `Recieved /leavequeue command with data: '${JSON.stringify(data)}'`
-  response.send(responseMessage)
+    //Retrieve Firebase data for this channel
+    const snapshot = await admin.firestore().doc(`queue/${channelName}`).get()
+    const fbData = snapshot.data()
+    console.log(fbData)
+
+    //Construct users array
+    const userArray = fbData?.users
+    // if the queue is empty or null, do not attempt to process and return
+    if (!userArray || !userArray.length) {
+      response.send(`leavequeue: The ${channelName} queue is empty! 🐻`)
+    }
+
+    //Filter out and remove user from the queue and update Firebase
+    const filteredUsers = userArray.filter((user: { userID: string }) => user.userID !== userID)
+    await admin.firestore().doc(`queue/${channelName}`).update({
+      users: filteredUsers
+    })
+
+    //Construct queue status string and send response to Slack
+    let responseMessage:string = `leavequeue: ${userName}, you have left the ${channelName} queue 🐻`
+    response.send(responseMessage)
+
+} catch (error) {
+   //Handle error
+   console.log(error)
+   response.status(200).send("GrizzBot is not trained to work in this channel 🐻")
+}
 })
 
