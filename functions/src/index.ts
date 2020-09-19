@@ -15,7 +15,7 @@ const bot = new WebClient(SLACK_BOT_TOKEN)
 // ============ Helper Functions ================
 
 // Post a message to a channel your app is in using ID and message text
-function sendLinkMessage(response: functions.Response<any>, channelID: string, channelName: string, userID: string, userName:string, link: string) {
+function sendLinkMessage( channelID: string, channelName: string, userID: string, userName:string, link: string) {
     console.log(userID)
 
     // Call the chat.postMessage method using the WebClient API
@@ -33,7 +33,7 @@ function sendLinkMessage(response: functions.Response<any>, channelID: string, c
           "type": "section",
           "text": {
             "type": "mrkdwn",
-            "text": `Hey, @${userName}, you're up! Click the link below to join the ${channelName} queue! 🐻`
+            "text": `Hey, @${userName}, you're up! Click the link below to join the ${channelName} meeting! 🐻`
           }
         },
         {
@@ -50,16 +50,51 @@ function sendLinkMessage(response: functions.Response<any>, channelID: string, c
     })
     .then(() => {
       console.log(`Link sent: Ephemeral message to ${userID} successfully posted to ${channelID}!`)
-      response.status(200).send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new hacker should join the call soon! 🐻`)
     })
     .catch((err) => {
       console.log(err)
-      response.status(200).send(err) //send error code
     })
     
 }
 
 // ============ Google Cloud Functions ================
+
+// Cloud Function: grizzbotMessageScheduler 
+// --------------------------
+export const grizzbotMessageScheduler = functions.https.onRequest(async (request, response) => {
+  functions.logger.info("Recieved request to grizzbotMessageScheduler", {structuredData: true})
+  const data = request.body
+  console.log(data)
+
+  
+ //GrizzBot Message Scheduling Starts Here:
+  try {
+
+// //Test message
+// const scheduledTime = new Date()
+// scheduledTime.setDate(scheduledTime.getDate()  )
+// scheduledTime.setHours(5, 45, 0)
+// await bot.chat.scheduleMessage({
+//   token: SLACK_BOT_TOKEN,
+//   channel: 'general',
+//   link_names: true,
+//   text: 'Keep going hackers! You\'re doing great! :grizzhacks:',
+//   post_at: (scheduledTime.getTime() / 1000).toString()
+// })
+
+
+
+    //send response
+    response.status(200).send("GrizzBot has successfully scheduled your messages! 🐻\nDon't open this webpage again or you'll get duplicates!")
+  }
+  catch (error) {
+    console.error(error);
+    response.status(200).send("GrizzBot encountered an error scheduling your messages!")
+  }
+
+ 
+})
+
 
 // Cloud Function: buttonClickHandler (currently does nothing)
 // --------------------------
@@ -72,30 +107,6 @@ export const buttonClickHandler = functions.https.onRequest((request, response) 
 
  //send response
  response.status(200)
-})
-
-// Cloud Function: Hello World - send a message to Slack channel
-// --------------------------
-export const slackHelloWorldMessage = functions.https.onRequest((request, response) => {
-  functions.logger.info("Recieved helloWorldMessageRequest", {structuredData: true})
-  //  // Parse and save the incoming Slack data
-  //  const slackData = request.body
-  //  console.log(slackData)
- 
-  //  const channelID = slackData.channel_id
-  //  const channelName = slackData.channel_name //use to retrieve sponsor Firebase doc
-  //  const userID = slackData.user_id
-  //  const userName = slackData.user_name
-  //  const command = slackData.command
-  //  const userMap = {userID, userName} //store each user as a map with their ID and username
-  
-  const channelID: string = "C01A31G8JEB"    //ID of sponsor_amazon channel
-  const channelName: string = "sponsor_amazon"
-  const userID: string = "U01AB51KSSJ"     
-  const userName: string = "harrisonlavins"             
-  //publish message to Slack and send response
-  sendLinkMessage(response, channelID, channelName, userID, userName, "https://google.com") 
-
 })
 
 
@@ -171,19 +182,21 @@ export const slashAdvanceQueue = functions.https.onRequest(async (request, respo
     const slackData = request.body
     console.log(slackData)
   
-    //get channel name and sponsor key
+    //Parse Slack data
     const channelName:string = slackData.channel_name //use to retrieve sponsor Firebase doc
     const enteredSponsorKey:string = slackData.text.trim()
+    const channelID = slackData.channel_id
+     
 
     //Retrieve Firebase data for this channel
     const snapshot = await admin.firestore().doc(`queue/${channelName}`).get()
     const fbData = snapshot.data()
     console.log(fbData)
 
-    const sponsorKey:string = fbData?.sponsorKey //get the actual sponsor key
+    const sponsorKey:string = fbData?.sponsorKey //get the actual sponsor key from Firebase
     if (enteredSponsorKey === sponsorKey) {
 
-      //Get users array and advance the queue
+      //Get users array 
       const userArray = fbData?.users
 
       // if the queue is empty or null, do not attempt to process
@@ -191,13 +204,19 @@ export const slashAdvanceQueue = functions.https.onRequest(async (request, respo
             response.send(`advancequeue: The ${channelName} queue is empty! 🐻`)
         }
 
+      //Get the meeting link and send to user at front of queue
+      const link = fbData?.link
+      const nextUser = userArray[0]
+      sendLinkMessage(channelID, channelName, nextUser.userID, nextUser.userName, link)
+
       //Advance the queue and update the Firebase users array
       userArray.shift()
       await admin.firestore().doc(`queue/${channelName}`).update({
         users: userArray
       })
 
-      response.send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new hacker should join the call soon! 🐻`)
+      //Respond to the sponsor in Slack that the queue has been advanced!
+      response.status(200).send(`advancequeue: Successfully advanced the ${channelName} queue!\nA new hacker should join the call soon! 🐻`)
     } else {
       response.send("advancequeue: Invalid sponsor key or wrong channel, try again! 🐻")
     }
